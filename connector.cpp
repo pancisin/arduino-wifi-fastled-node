@@ -1,21 +1,9 @@
 #include <ArduinoMqttClient.h>
 #include <ArduinoJson.h>
 #include "connector.h"
+#include "logger.h"
 
 Connector *Connector::instancePtr = nullptr;
-
-void dbg(char *format, ...)
-{
-    char output[128];
-    va_list args;
-    va_start(args, format);
-
-    vsprintf(output, format, args);
-    Serial.println(output);
-
-    va_end(args);
-    return;
-}
 
 void Connector::handleHeartbeat()
 {

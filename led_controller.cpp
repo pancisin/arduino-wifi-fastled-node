@@ -1,5 +1,6 @@
 #include "led_controller.h"
 #include "color_utils.h"
+#include "logger.h"
 
 LedController::LedController(uint8_t dataPin, int numLeds)
 {
@@ -58,6 +59,8 @@ void LedController::setColorTemp(uint8_t colorTemp)
 void LedController::setColorHex(const char *colorHex)
 {
     long colorCode = strtol(&colorHex[1], NULL, 16);
+
+    dbg("Setting color to %s (0x%06lX).", colorHex, colorCode);
 
     CRGB newColor = CRGB(colorCode);
     fill_point_gradient(targetLeds, this->numLeds, newColor, CRGB::Black);

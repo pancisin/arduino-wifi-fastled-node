@@ -2,6 +2,7 @@
 #include <SPI.h>
 #include "connector.h"
 #include "led_controller.h"
+#include "logger.h"
 
 LedController ledController = LedController(13, NUM_LEDS);
 
@@ -42,7 +43,7 @@ void setup()
 {
   Serial.begin(9600);
 
-  Serial.println("Starting Living Room Controller...");
+  dbg("Starting Living Room Controller...");
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
