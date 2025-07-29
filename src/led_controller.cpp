@@ -9,8 +9,8 @@ LedController::LedController(uint8_t dataPin, int numLeds)
     this->leds = new CRGB[this->numLeds];
     this->targetLeds = new CRGB[this->numLeds];
 
-    // FastLED.addLeds<WS2812Controller800Khz, 13, RGB>(this->leds, this->numLeds);
-    FastLED.addLeds<WS2811, 13>(this->leds, this->numLeds);
+    FastLED.addLeds<WS2812Controller800Khz, 13, RGB>(this->leds, this->numLeds);
+    // FastLED.addLeds<WS2811, 13>(this->leds, this->numLeds);
     FastLED.setBrightness(255);
     fill_solid(targetLeds, this->numLeds, CRGB::Black);
 

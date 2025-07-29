@@ -3,6 +3,7 @@
 #include "connector.h"
 #include "led_controller.h"
 #include "logger.h"
+#include "secrets.h"
 
 LedController ledController = LedController(13, NUM_LEDS);
 
