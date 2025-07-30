@@ -1,8 +1,7 @@
 #include "logger.h"
 #include <Arduino.h>
 
-void dbg(char *format, ...)
-{
+void dbg(const char format[], ...) {
     char output[128];
     va_list args;
     va_start(args, format);
@@ -11,5 +10,4 @@ void dbg(char *format, ...)
     Serial.println(output);
 
     va_end(args);
-    return;
 }

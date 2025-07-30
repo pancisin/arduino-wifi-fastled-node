@@ -2,20 +2,22 @@
 #define LedController_H
 #include <FastLED.h>
 
-class LedController
-{
+class LedController {
     CRGB *leds;
     CRGB *targetLeds;
     unsigned long lastLedCycle = 0;
     unsigned long lastAnimCycle = 0;
-    int numLeds;
+    uint8_t numLeds;
 
-    int cycleBlendAmount = 5; // How much to blend each cycle
+    uint8_t cycleBlendAmount = 5; // How much to blend each cycle
 
 public:
-    LedController(uint8_t dataPin, int numLeds);
+    LedController(uint8_t dataPin, uint8_t numLeds);
+
     void setColor(uint8_t r, uint8_t g, uint8_t b);
+
     void setColorTemp(uint8_t colorTemp);
+
     void setColorHex(const char *colorHex);
 
     void turnOff();
