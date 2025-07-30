@@ -1,6 +1,6 @@
-#include "led_controller.h"
+#include "led_controller.hpp"
 #include "color_utils.h"
-#include "logger.h"
+#include "logger.hpp"
 
 LedController::LedController(const uint8_t dataPin, const uint8_t numLeds) {
     this->numLeds = numLeds;

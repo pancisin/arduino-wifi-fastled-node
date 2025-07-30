@@ -1,8 +1,8 @@
 #include <ArduinoJson.h>
 #include <SPI.h>
-#include "connector.h"
-#include "led_controller.h"
-#include "logger.h"
+#include "connector.hpp"
+#include "led_controller.hpp"
+#include "logger.hpp"
 #include "secrets.h"
 
 LedController ledController = LedController(13, NUM_LEDS);

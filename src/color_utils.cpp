@@ -1,4 +1,4 @@
-#include "color_utils.h"
+#include "color_utils.hpp"
 #include <FastLED.h>
 
 void shift_left(CRGB *arr, const uint8_t numToMove) {

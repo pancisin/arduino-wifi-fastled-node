@@ -1,7 +1,7 @@
 #include <ArduinoMqttClient.h>
 #include <ArduinoJson.h>
-#include "connector.h"
-#include "logger.h"
+#include "connector.hpp"
+#include "logger.hpp"
 
 Connector *Connector::instancePtr = nullptr;
 
@@ -101,20 +101,20 @@ void Connector::setWifi(const char *ssid, const char *password) {
     this->wifiPassword = password;
 }
 
-void Connector::setMqtt(const char *broker, uint16_t port, const char *username, const char *password) {
+void Connector::setMqtt(const char *broker, const uint16_t port, const char *username, const char *password) {
     this->broker = broker;
     this->port = port;
     this->username = username;
     this->password = password;
 }
 
-void Connector::onMessage(const char *top, void (*callback)(JsonDocument doc)) {
-    strcpy(this->topic, top);
+void Connector::onMessage(const char *topic, void (*callback)(JsonDocument)) {
+    strcpy(this->topic, topic);
     strcat(this->topic, "/status");
 
     dbg("Setting MQTT topic to %s.", this->topic);
 
-    strcpy(this->hbTopic, top);
+    strcpy(this->hbTopic, topic);
     strcat(this->hbTopic, "/hb");
 
     this->callback = callback;
