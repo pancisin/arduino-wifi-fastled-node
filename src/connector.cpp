@@ -1,13 +1,124 @@
 #include <ArduinoMqttClient.h>
 #include <ArduinoJson.h>
+#include <avr/wdt.h>
 #include "connector.hpp"
 #include "logger.hpp"
 
 Connector *Connector::instancePtr = nullptr;
 
-void Connector::handleHeartbeat() {
+bool Connector::attemptWiFiConnection() {
+    if (WiFi.status() == WL_CONNECTED) {
+        dbg("WiFi already connected. IP: %s", WiFi.localIP());
+        return true;
+    }
+
     unsigned long currentMillis = millis();
-    if (currentMillis - lastHbMillis > 5000) {
+
+    if (currentMillis - lastReconnectAttempt < 5000) {
+        return false;
+    }
+
+    lastReconnectAttempt = currentMillis;
+    reconnectAttempts++;
+
+    if (reconnectAttempts > 20) {
+        dbg("Too many WiFi reconnection attempts. Resetting...");
+        while(1);
+    }
+
+#ifdef STATIC_IP
+    IPAddress ip, gateway, subnet, dns;
+    ip.fromString(STATIC_IP);
+    gateway.fromString(GATEWAY);
+    subnet.fromString(SUBNET);
+    dns.fromString(DNS);
+
+    WiFi.config(ip, dns, gateway, subnet);
+    dbg("Configuring static IP: %s", STATIC_IP);
+#endif
+
+    dbg("Attempting WiFi connection to SSID: %s (attempt %d)", wifiSSID, reconnectAttempts);
+    wdt_reset();
+
+    status = WiFi.begin(wifiSSID, wifiPassword);
+
+    unsigned long startAttempt = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - startAttempt) < 5000) {
+        delay(500);
+        wdt_reset();
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        dbg("WiFi connected! IP: %s", WiFi.localIP());
+        reconnectAttempts = 0;
+        wdt_reset();
+        return true;
+    }
+
+    wdt_reset();
+    return false;
+}
+
+bool Connector::attemptMQTTConnection() {
+    if (mqttClient.connected()) {
+        return true;
+    }
+
+    unsigned long currentMillis = millis();
+
+    if (currentMillis - lastReconnectAttempt < 5000) {
+        return false;
+    }
+
+    lastReconnectAttempt = currentMillis;
+    reconnectAttempts++;
+
+    if (reconnectAttempts > 20) {
+        dbg("Too many MQTT reconnection attempts. Resetting...");
+        while(1);
+    }
+
+    dbg("Attempting MQTT connection (attempt %d)", reconnectAttempts);
+
+    if (reconnectAttempts == 1) {
+        mqttClient.setUsernamePassword(this->username, this->password);
+    }
+
+    wdt_reset();
+
+    if (mqttClient.connect(this->broker, this->port)) {
+        dbg("MQTT connected!");
+        reconnectAttempts = 0;
+
+        if (!callbacksRegistered) {
+            mqttClient.onMessage(handleMessage);
+            callbacksRegistered = true;
+            dbg("MQTT callbacks registered");
+
+            wdt_enable(WDTO_2S);
+            dbg("Watchdog timer enabled (2s timeout) - system is now stable");
+        }
+
+        mqttClient.subscribe(this->topic);
+        dbg("Subscribed to MQTT topic %s", this->topic);
+
+        return true;
+    } else {
+        dbg("MQTT connection failed! Error code: %d", mqttClient.connectError());
+    }
+
+    wdt_reset();
+    return false;
+}
+
+void Connector::handleHeartbeat() {
+    if (connectionState != CONNECTED) {
+        return;
+    }
+
+    unsigned long currentMillis = millis();
+
+    if (currentMillis - lastHbMillis >= 5000) {
         lastHbMillis = currentMillis;
 
         this->hbValue = this->hbValue == 1 ? 0 : 1;
@@ -15,29 +126,68 @@ void Connector::handleHeartbeat() {
         mqttClient.print(this->hbValue);
         mqttClient.endMessage();
 
-        digitalWrite(LED_BUILTIN, LOW);
+        digitalWrite(LED_BUILTIN, HIGH);
     }
 
-    if (currentMillis - lastHbMillis > 4900) {
-        digitalWrite(LED_BUILTIN, HIGH);
+    if (currentMillis - lastHbMillis >= 100 && currentMillis - lastHbMillis < 5000) {
+        digitalWrite(LED_BUILTIN, LOW);
     }
 }
 
 bool Connector::isAlive() {
     unsigned long currentMillis = millis();
-    if (currentMillis - lastWiFiCheck > 5000) {
+    wdt_reset();
+
+    if (currentMillis - lastWiFiCheck >= 5000) {
         lastWiFiCheck = currentMillis;
         status = WiFi.status();
+        wdt_reset();
 
-        if (status == WL_DISCONNECTED || status == WL_CONNECTION_LOST || !mqttClient.connected()) {
-            initialize();
+
+        if (status == WL_DISCONNECTED || status == WL_CONNECTION_LOST) {
+            dbg("WiFi disconnected! Status: %d", status);
+            connectionState = DISCONNECTED;
+        } else if (!mqttClient.connected() && status == WL_CONNECTED) {
+            dbg("MQTT disconnected!");
+            connectionState = CONNECTING_MQTT;
+        } else if (status == WL_CONNECTED && mqttClient.connected()) {
+            connectionState = CONNECTED;
         }
     }
 
-    mqttClient.poll();
 
-    handleHeartbeat();
-    return true;
+    switch (connectionState) {
+        case DISCONNECTED:
+            connectionState = CONNECTING_WIFI;
+            reconnectAttempts = 0;
+            lastReconnectAttempt = 0;
+            wdt_reset();
+            break;
+
+        case CONNECTING_WIFI:
+            if (attemptWiFiConnection()) {
+                connectionState = CONNECTING_MQTT;
+                reconnectAttempts = 0;
+                lastReconnectAttempt = 0;
+            }
+            wdt_reset();
+            break;
+
+        case CONNECTING_MQTT:
+            if (attemptMQTTConnection()) {
+                connectionState = CONNECTED;
+            }
+            wdt_reset();
+            break;
+
+        case CONNECTED:
+            mqttClient.poll();
+            handleHeartbeat();
+            wdt_reset();
+            break;
+    }
+
+    return connectionState == CONNECTED;
 }
 
 void Connector::initialize() {
@@ -46,29 +196,19 @@ void Connector::initialize() {
     if (WiFi.status() == WL_NO_MODULE) {
         dbg("Communication with WiFi module failed!");
         while (true) {
+            delay(1000);
         }
     }
 
-    while (status != WL_CONNECTED) {
-        dbg("Attempting to connect to SSID: %s.", wifiSSID);
-        status = WiFi.begin(wifiSSID, wifiPassword);
-        delay(5000);
-    }
 
-    dbg("Connected to the WiFi network. IP: %s.", WiFi.localIP());
+    dbg("Watchdog timer will be enabled after first connection");
 
-    mqttClient.stop();
-    mqttClient.setUsernamePassword(this->username, this->password);
 
-    while (!mqttClient.connect(this->broker, this->port)) {
-        dbg("MQTT connection failed! Error code: %s.", mqttClient.connectError());
-        delay(5000);
-    }
+    connectionState = DISCONNECTED;
+    reconnectAttempts = 0;
+    lastReconnectAttempt = 0;
 
-    mqttClient.onMessage(handleMessage);
-
-    mqttClient.subscribe(this->topic);
-    dbg("Subscribed to MQTT topic %s.", this->topic);
+    dbg("Connector initialized. Will attempt connections in main loop.");
 }
 
 void Connector::handleMessage(int messageSize) {
@@ -78,17 +218,14 @@ void Connector::handleMessage(int messageSize) {
 }
 
 void Connector::triggerReceived() {
-    String messageTopic = mqttClient.messageTopic();
-    char top[messageTopic.length()];
-    strcpy(top, messageTopic.c_str());
 
-    if (strcmp(top, this->topic) == 0) {
+    if (mqttClient.messageTopic() == this->topic) {
         this->doc.clear();
 
         const DeserializationError error = deserializeJson(this->doc, mqttClient);
 
         if (error) {
-            dbg("deserializeJson() failed: %s.", error.c_str());
+            dbg("deserializeJson() failed: %s", error.c_str());
             return;
         }
 
@@ -109,13 +246,16 @@ void Connector::setMqtt(const char *broker, const uint16_t port, const char *use
 }
 
 void Connector::onMessage(const char *topic, void (*callback)(JsonDocument)) {
-    strcpy(this->topic, topic);
-    strcat(this->topic, "/status");
 
-    dbg("Setting MQTT topic to %s.", this->topic);
+    strncpy(this->topic, topic, sizeof(this->topic) - 9);
+    this->topic[sizeof(this->topic) - 9] = '\0';
+    strncat(this->topic, "/status", 7);
 
-    strcpy(this->hbTopic, topic);
-    strcat(this->hbTopic, "/hb");
+    dbg("Setting MQTT topic to %s", this->topic);
+
+    strncpy(this->hbTopic, topic, sizeof(this->hbTopic) - 4);
+    this->hbTopic[sizeof(this->hbTopic) - 4] = '\0';
+    strncat(this->hbTopic, "/hb", 3);
 
     this->callback = callback;
 }

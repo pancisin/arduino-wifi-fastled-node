@@ -5,6 +5,14 @@
 #include <ArduinoJson.h>
 #include <WiFiNINA.h>
 
+// Connection state for non-blocking reconnection
+enum ConnectionState {
+    DISCONNECTED,
+    CONNECTING_WIFI,
+    CONNECTING_MQTT,
+    CONNECTED
+};
+
 class Connector {
 private:
     Connector();
@@ -16,22 +24,28 @@ private:
     MqttClient mqttClient = nullptr;
     unsigned long lastWiFiCheck = 0;
     unsigned long lastHbMillis = 0;
+    unsigned long lastReconnectAttempt = 0;
     int hbValue = 0;
+    bool callbacksRegistered = false;
+    uint8_t reconnectAttempts = 0;
+    ConnectionState connectionState = DISCONNECTED;
 
     // WiFi
     const char *wifiSSID{};
     const char *wifiPassword{};
 
     void handleHeartbeat();
+    bool attemptWiFiConnection();
+    bool attemptMQTTConnection();
 
     // message handling
     void (*callback)(JsonDocument doc){};
 
     static void handleMessage(int);
 
-    JsonDocument doc;
-    char topic[50]{};
-    char hbTopic[50]{};
+    StaticJsonDocument<512> doc;  // Fixed size for stability
+    char topic[64]{};
+    char hbTopic[64]{};
 
     // MQTT connection parameters
     const char *broker{};

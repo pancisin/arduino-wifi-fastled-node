@@ -1,5 +1,5 @@
 #include "led_controller.hpp"
-#include "color_utils.h"
+#include "color_utils.hpp"
 #include "logger.hpp"
 
 LedController::LedController(const uint8_t dataPin, const uint8_t numLeds) {

@@ -1,4 +1,4 @@
-#include "logger.h"
+#include "logger.hpp"
 #include <Arduino.h>
 
 void dbg(const char format[], ...) {
@@ -6,7 +6,7 @@ void dbg(const char format[], ...) {
     va_list args;
     va_start(args, format);
 
-    vsprintf(output, format, args);
+    vsnprintf(output, sizeof(output), format, args);  // Safe version with bounds checking
     Serial.println(output);
 
     va_end(args);
